@@ -27,6 +27,8 @@ const testConnectionBtn = document.getElementById('testConnectionBtn');
 const humanizeToggle = document.getElementById('humanizeToggle');
 const speedSlider = document.getElementById('speedSlider');
 const speedValue = document.getElementById('speedValue');
+const toggleLogBtn = document.getElementById('toggleLogBtn');
+const logHeader = document.getElementById('logHeader');
 
 // Initialize
 async function init() {
@@ -523,6 +525,21 @@ async function testConnection() {
   }
 }
 
+// Toggle activity log visibility
+function toggleLog() {
+  const isCollapsed = logContainer.classList.contains('collapsed');
+
+  if (isCollapsed) {
+    logContainer.classList.remove('collapsed');
+    toggleLogBtn.classList.add('expanded');
+    toggleLogBtn.textContent = '▼';
+  } else {
+    logContainer.classList.add('collapsed');
+    toggleLogBtn.classList.remove('expanded');
+    toggleLogBtn.textContent = '▼';
+  }
+}
+
 // Attach event listeners
 function attachEventListeners() {
   addBlockBtn.addEventListener('click', addBlock);
@@ -542,6 +559,11 @@ function attachEventListeners() {
     speedValue.textContent = typingSpeed.toFixed(1) + 'x';
     saveSpeedSetting();
   });
+  toggleLogBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleLog();
+  });
+  logHeader.addEventListener('click', toggleLog);
 }
 
 // Initialize on load

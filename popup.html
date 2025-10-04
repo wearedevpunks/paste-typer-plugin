@@ -187,6 +187,8 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 12px;
+      cursor: pointer;
+      user-select: none;
     }
 
     .debug-header h2 {
@@ -207,6 +209,23 @@
       background: #555;
     }
 
+    .btn-toggle {
+      background: transparent;
+      color: #666;
+      padding: 4px 8px;
+      font-size: 12px;
+      border: 1px solid #ddd;
+      transition: transform 0.3s;
+    }
+
+    .btn-toggle:hover {
+      background: #f5f5f5;
+    }
+
+    .btn-toggle.expanded {
+      transform: rotate(180deg);
+    }
+
     .log-container {
       background: #1e1e1e;
       border: 1px solid #ddd;
@@ -218,9 +237,18 @@
       font-size: 11px;
       color: #d4d4d4;
       line-height: 1.4;
+      transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
     }
 
-    .log-container:empty::before {
+    .log-container.collapsed {
+      max-height: 0;
+      padding: 0;
+      opacity: 0;
+      overflow: hidden;
+      border: none;
+    }
+
+    .log-container:not(.collapsed):empty::before {
       content: 'No activity yet...';
       color: #666;
       font-style: italic;
@@ -445,14 +473,15 @@
   </div>
 
   <div class="debug-section">
-    <div class="debug-header">
+    <div class="debug-header" id="logHeader">
       <h2>Activity Log</h2>
-      <div style="display: flex; gap: 8px;">
+      <div style="display: flex; gap: 8px; align-items: center;">
         <button id="testConnectionBtn" class="btn-secondary" style="padding: 4px 12px; font-size: 11px;">Test Connection</button>
         <button id="clearLogBtn" class="btn-clear">Clear</button>
+        <button id="toggleLogBtn" class="btn-toggle">▼</button>
       </div>
     </div>
-    <div id="logContainer" class="log-container"></div>
+    <div id="logContainer" class="log-container collapsed"></div>
   </div>
 
   <script src="popup.js"></script>
