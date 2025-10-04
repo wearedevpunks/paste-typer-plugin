@@ -79,9 +79,18 @@ function setupKeyboardListener() {
 function setupMessageListener() {
   log('info', 'Message listener setup');
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    log('info', 'Message received from popup', { messageType: message.type });
+    log('info', 'Message received', { messageType: message.type });
 
-    if (message.type === 'RELOAD_SEQUENCES') {
+    if (message.type === 'PING') {
+      log('info', 'PING received, responding with PONG');
+      sendResponse({
+        status: 'alive',
+        currentBlockIndex,
+        activeSequenceId,
+        numSequences: Object.keys(sequences).length
+      });
+      return true;
+    } else if (message.type === 'RELOAD_SEQUENCES') {
       loadData().then(() => {
         currentBlockIndex = 0; // Reset to first block when sequences are updated
         log('success', 'Sequences reloaded, index reset to 0');
@@ -93,6 +102,8 @@ function setupMessageListener() {
         oldIndex,
         newIndex: currentBlockIndex
       });
+      sendResponse({ success: true, newIndex: currentBlockIndex });
+      return true;
     }
   });
 }

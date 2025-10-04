@@ -19,6 +19,7 @@ const resetBtn = document.getElementById('resetBtn');
 const saveBtn = document.getElementById('saveBtn');
 const logContainer = document.getElementById('logContainer');
 const clearLogBtn = document.getElementById('clearLogBtn');
+const testConnectionBtn = document.getElementById('testConnectionBtn');
 
 // Initialize
 async function init() {
@@ -400,6 +401,62 @@ async function resetSequence() {
   }, 1000);
 }
 
+// Test connection to content script
+async function testConnection() {
+  addLog('info', 'Testing connection to content script...');
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) {
+    addLog('error', 'No active tab found');
+    return;
+  }
+
+  addLog('info', 'Active tab found', {
+    tabId: tab.id,
+    url: tab.url,
+    title: tab.title
+  });
+
+  // Check if URL is allowed (chrome:// urls can't have content scripts)
+  if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+    addLog('warning', 'Cannot inject content script on chrome:// or extension pages', {
+      url: tab.url,
+      suggestion: 'Navigate to a regular website (e.g., google.com) to test'
+    });
+    return;
+  }
+
+  try {
+    // Try to ping the content script
+    const response = await chrome.tabs.sendMessage(tab.id, { type: 'PING' });
+    addLog('success', 'Content script responded', response);
+  } catch (error) {
+    addLog('error', 'Content script not responding', {
+      error: error.message,
+      suggestion: 'Reload the page and try again'
+    });
+
+    // Try to inject content script manually (if API is available)
+    if (chrome.scripting && chrome.scripting.executeScript) {
+      addLog('info', 'Attempting to inject content script manually...');
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js']
+        });
+        addLog('success', 'Content script injected manually - try the connection test again');
+      } catch (injectError) {
+        addLog('error', 'Failed to inject content script', {
+          error: injectError.message,
+          suggestion: 'Reload the page manually and reload the extension'
+        });
+      }
+    } else {
+      addLog('warning', 'Manual injection not available. Please reload the page.');
+    }
+  }
+}
+
 // Attach event listeners
 function attachEventListeners() {
   addBlockBtn.addEventListener('click', addBlock);
@@ -409,6 +466,7 @@ function attachEventListeners() {
   deleteSequenceBtn.addEventListener('click', deleteCurrentSequence);
   sequenceSelect.addEventListener('change', (e) => switchSequence(e.target.value));
   clearLogBtn.addEventListener('click', clearLogs);
+  testConnectionBtn.addEventListener('click', testConnection);
 }
 
 // Initialize on load
