@@ -1,16 +1,23 @@
 // Storage keys
 const STORAGE_KEY = 'pasteTyperSequences';
 const ACTIVE_SEQUENCE_KEY = 'pasteTyperActiveSequence';
+const HUMANIZE_KEY = 'pasteTyperHumanize';
 
 // State
 let sequences = {};
 let activeSequenceId = null;
 let currentBlockIndex = 0;
 let isTyping = false;
+let humanizeTyping = true;
 
 // Configuration
-const TYPING_SPEED_MIN = 30; // milliseconds
-const TYPING_SPEED_MAX = 80; // milliseconds
+const TYPING_SPEED_MIN = 40; // milliseconds
+const TYPING_SPEED_MAX = 120; // milliseconds
+const TYPING_SPEED_BURST_MIN = 20; // Fast typing bursts
+const TYPING_SPEED_BURST_MAX = 50; // Fast typing bursts
+const PAUSE_AFTER_WORD_MIN = 100; // Pause after word/space
+const PAUSE_AFTER_WORD_MAX = 200; // Pause after word/space
+const BURST_PROBABILITY = 0.6; // 60% chance of fast burst typing
 
 // Logging helper
 function log(type, message, meta = {}) {
@@ -39,13 +46,15 @@ async function init() {
 
 // Load sequences and active sequence
 async function loadData() {
-  const result = await chrome.storage.local.get([STORAGE_KEY, ACTIVE_SEQUENCE_KEY]);
+  const result = await chrome.storage.local.get([STORAGE_KEY, ACTIVE_SEQUENCE_KEY, HUMANIZE_KEY]);
   sequences = result[STORAGE_KEY] || {};
   activeSequenceId = result[ACTIVE_SEQUENCE_KEY];
+  humanizeTyping = result[HUMANIZE_KEY] !== undefined ? result[HUMANIZE_KEY] : true;
   log('info', 'Data loaded from storage', {
     activeSequenceId,
     numSequences: Object.keys(sequences).length,
-    currentBlockIndex
+    currentBlockIndex,
+    humanizeTyping
   });
 }
 
@@ -87,7 +96,8 @@ function setupMessageListener() {
         status: 'alive',
         currentBlockIndex,
         activeSequenceId,
-        numSequences: Object.keys(sequences).length
+        numSequences: Object.keys(sequences).length,
+        humanizeTyping
       });
       return true;
     } else if (message.type === 'RELOAD_SEQUENCES') {
@@ -103,6 +113,11 @@ function setupMessageListener() {
         newIndex: currentBlockIndex
       });
       sendResponse({ success: true, newIndex: currentBlockIndex });
+      return true;
+    } else if (message.type === 'UPDATE_HUMANIZE') {
+      humanizeTyping = message.humanize;
+      log('success', 'Humanize typing setting updated', { humanizeTyping });
+      sendResponse({ success: true, humanizeTyping });
       return true;
     }
   });
@@ -198,8 +213,14 @@ async function typeText(element, text) {
 
   const isContentEditable = element.isContentEditable;
 
+  // Variables for humanized typing
+  let inBurst = humanizeTyping ? Math.random() < BURST_PROBABILITY : false;
+  let burstLength = Math.floor(Math.random() * 5) + 3; // Burst of 3-7 chars
+  let burstCount = 0;
+
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
+    const prevChar = i > 0 ? text[i - 1] : '';
 
     if (isContentEditable) {
       // For contenteditable elements
@@ -217,8 +238,42 @@ async function typeText(element, text) {
       element.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
-    // Random delay to simulate human typing
-    const delay = Math.random() * (TYPING_SPEED_MAX - TYPING_SPEED_MIN) + TYPING_SPEED_MIN;
+    // Determine delay based on typing pattern
+    let delay;
+
+    if (humanizeTyping) {
+      // Humanized typing with bursts and pauses
+
+      // Pause after punctuation or space (end of word/sentence)
+      if (prevChar === ' ' || prevChar === '.' || prevChar === ',' || prevChar === '!' || prevChar === '?') {
+        delay = Math.random() * (PAUSE_AFTER_WORD_MAX - PAUSE_AFTER_WORD_MIN) + PAUSE_AFTER_WORD_MIN;
+        // Start new burst after pause
+        inBurst = Math.random() < BURST_PROBABILITY;
+        burstLength = Math.floor(Math.random() * 5) + 3;
+        burstCount = 0;
+      }
+      // Fast burst typing
+      else if (inBurst && burstCount < burstLength) {
+        delay = Math.random() * (TYPING_SPEED_BURST_MAX - TYPING_SPEED_BURST_MIN) + TYPING_SPEED_BURST_MIN;
+        burstCount++;
+      }
+      // Normal typing speed
+      else {
+        delay = Math.random() * (TYPING_SPEED_MAX - TYPING_SPEED_MIN) + TYPING_SPEED_MIN;
+        // Maybe start a new burst
+        if (!inBurst && Math.random() < 0.3) {
+          inBurst = true;
+          burstLength = Math.floor(Math.random() * 5) + 3;
+          burstCount = 0;
+        } else {
+          inBurst = false;
+        }
+      }
+    } else {
+      // Simple consistent typing speed (original behavior)
+      delay = Math.random() * (TYPING_SPEED_MAX - TYPING_SPEED_MIN) + TYPING_SPEED_MIN;
+    }
+
     await sleep(delay);
   }
 

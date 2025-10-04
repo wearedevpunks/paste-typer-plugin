@@ -2,12 +2,14 @@
 const STORAGE_KEY = 'pasteTyperSequences';
 const ACTIVE_SEQUENCE_KEY = 'pasteTyperActiveSequence';
 const LOG_KEY = 'pasteTyperLogs';
+const HUMANIZE_KEY = 'pasteTyperHumanize';
 
 // State
 let sequences = {};
 let activeSequenceId = null;
 let currentTextBlocks = [];
 let logs = [];
+let humanizeTyping = true; // Default to humanized
 
 // DOM Elements
 const sequenceSelect = document.getElementById('sequenceSelect');
@@ -20,18 +22,21 @@ const saveBtn = document.getElementById('saveBtn');
 const logContainer = document.getElementById('logContainer');
 const clearLogBtn = document.getElementById('clearLogBtn');
 const testConnectionBtn = document.getElementById('testConnectionBtn');
+const humanizeToggle = document.getElementById('humanizeToggle');
 
 // Initialize
 async function init() {
   await loadSequences();
   await loadActiveSequence();
   await loadLogs();
+  await loadHumanizeSetting();
 
   // Now we can log (after loadLogs)
   addLog('info', 'Popup opened and initialized', {
     activeSequenceId,
     numSequences: Object.keys(sequences).length,
-    numBlocks: sequences[activeSequenceId]?.blocks?.length || 0
+    numBlocks: sequences[activeSequenceId]?.blocks?.length || 0,
+    humanizeTyping
   });
 
   updateUI();
@@ -78,6 +83,29 @@ async function saveSequencesToStorage() {
 // Save active sequence
 async function saveActiveSequence() {
   await chrome.storage.local.set({ [ACTIVE_SEQUENCE_KEY]: activeSequenceId });
+}
+
+// Load humanize setting
+async function loadHumanizeSetting() {
+  const result = await chrome.storage.local.get(HUMANIZE_KEY);
+  humanizeTyping = result[HUMANIZE_KEY] !== undefined ? result[HUMANIZE_KEY] : true;
+  humanizeToggle.checked = humanizeTyping;
+}
+
+// Save humanize setting
+async function saveHumanizeSetting() {
+  await chrome.storage.local.set({ [HUMANIZE_KEY]: humanizeTyping });
+
+  // Notify content script
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab) {
+    chrome.tabs.sendMessage(tab.id, {
+      type: 'UPDATE_HUMANIZE',
+      humanize: humanizeTyping
+    }).catch(() => {});
+  }
+
+  addLog('info', 'Humanize typing setting updated', { humanizeTyping });
 }
 
 // Update UI
@@ -475,6 +503,10 @@ function attachEventListeners() {
   sequenceSelect.addEventListener('change', (e) => switchSequence(e.target.value));
   clearLogBtn.addEventListener('click', clearLogs);
   testConnectionBtn.addEventListener('click', testConnection);
+  humanizeToggle.addEventListener('change', (e) => {
+    humanizeTyping = e.target.checked;
+    saveHumanizeSetting();
+  });
 }
 
 // Initialize on load
