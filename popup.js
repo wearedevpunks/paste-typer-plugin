@@ -1,0 +1,332 @@
+// Storage keys
+const STORAGE_KEY = 'pasteTyperSequences';
+const ACTIVE_SEQUENCE_KEY = 'pasteTyperActiveSequence';
+
+// State
+let sequences = {};
+let activeSequenceId = null;
+let currentTextBlocks = [];
+
+// DOM Elements
+const sequenceSelect = document.getElementById('sequenceSelect');
+const newSequenceBtn = document.getElementById('newSequenceBtn');
+const deleteSequenceBtn = document.getElementById('deleteSequenceBtn');
+const textBlocksContainer = document.getElementById('textBlocksContainer');
+const addBlockBtn = document.getElementById('addBlockBtn');
+const resetBtn = document.getElementById('resetBtn');
+const saveBtn = document.getElementById('saveBtn');
+
+// Initialize
+async function init() {
+  await loadSequences();
+  await loadActiveSequence();
+  updateUI();
+  attachEventListeners();
+}
+
+// Load sequences from storage
+async function loadSequences() {
+  const result = await chrome.storage.local.get(STORAGE_KEY);
+  sequences = result[STORAGE_KEY] || {};
+
+  // Create default sequence if none exist
+  if (Object.keys(sequences).length === 0) {
+    const defaultId = generateId();
+    sequences[defaultId] = {
+      id: defaultId,
+      name: 'Default Sequence',
+      blocks: ['']
+    };
+    await saveSequencesToStorage();
+  }
+}
+
+// Load active sequence
+async function loadActiveSequence() {
+  const result = await chrome.storage.local.get(ACTIVE_SEQUENCE_KEY);
+  activeSequenceId = result[ACTIVE_SEQUENCE_KEY];
+
+  // Set to first sequence if no active sequence
+  if (!activeSequenceId || !sequences[activeSequenceId]) {
+    activeSequenceId = Object.keys(sequences)[0];
+    await saveActiveSequence();
+  }
+
+  currentTextBlocks = [...sequences[activeSequenceId].blocks];
+}
+
+// Save sequences to storage
+async function saveSequencesToStorage() {
+  await chrome.storage.local.set({ [STORAGE_KEY]: sequences });
+}
+
+// Save active sequence
+async function saveActiveSequence() {
+  await chrome.storage.local.set({ [ACTIVE_SEQUENCE_KEY]: activeSequenceId });
+}
+
+// Update UI
+function updateUI() {
+  updateSequenceSelector();
+  renderTextBlocks();
+}
+
+// Update sequence selector
+function updateSequenceSelector() {
+  sequenceSelect.innerHTML = '';
+
+  Object.values(sequences).forEach(seq => {
+    const option = document.createElement('option');
+    option.value = seq.id;
+    option.textContent = seq.name;
+    if (seq.id === activeSequenceId) {
+      option.selected = true;
+    }
+    sequenceSelect.appendChild(option);
+  });
+}
+
+// Render text blocks
+function renderTextBlocks() {
+  textBlocksContainer.innerHTML = '';
+
+  currentTextBlocks.forEach((text, index) => {
+    const blockDiv = document.createElement('div');
+    blockDiv.className = 'text-block';
+    blockDiv.draggable = true;
+    blockDiv.dataset.index = index;
+
+    // Drag events
+    blockDiv.addEventListener('dragstart', handleDragStart);
+    blockDiv.addEventListener('dragend', handleDragEnd);
+    blockDiv.addEventListener('dragover', handleDragOver);
+    blockDiv.addEventListener('drop', handleDrop);
+    blockDiv.addEventListener('dragleave', handleDragLeave);
+
+    const header = document.createElement('div');
+    header.className = 'text-block-header';
+
+    const label = document.createElement('div');
+    label.className = 'text-block-label';
+
+    const dragHandle = document.createElement('span');
+    dragHandle.className = 'drag-handle';
+    dragHandle.textContent = '⋮⋮';
+    dragHandle.title = 'Drag to reorder';
+
+    const labelText = document.createElement('span');
+    labelText.textContent = `Text Block ${index + 1}`;
+
+    label.appendChild(dragHandle);
+    label.appendChild(labelText);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'btn-remove';
+    removeBtn.textContent = 'Remove';
+    removeBtn.onclick = () => removeBlock(index);
+
+    header.appendChild(label);
+    if (currentTextBlocks.length > 1) {
+      header.appendChild(removeBtn);
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.placeholder = 'Enter text to type...';
+    textarea.dataset.index = index;
+    textarea.oninput = (e) => updateBlock(index, e.target.value);
+
+    blockDiv.appendChild(header);
+    blockDiv.appendChild(textarea);
+    textBlocksContainer.appendChild(blockDiv);
+  });
+}
+
+// Update block text
+function updateBlock(index, text) {
+  currentTextBlocks[index] = text;
+}
+
+// Add new block
+function addBlock() {
+  currentTextBlocks.push('');
+  renderTextBlocks();
+}
+
+// Remove block
+function removeBlock(index) {
+  if (currentTextBlocks.length > 1) {
+    currentTextBlocks.splice(index, 1);
+    renderTextBlocks();
+  }
+}
+
+// Save current sequence
+async function saveCurrentSequence() {
+  if (activeSequenceId && sequences[activeSequenceId]) {
+    sequences[activeSequenceId].blocks = [...currentTextBlocks];
+    await saveSequencesToStorage();
+
+    // Notify content script to reload
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) {
+      chrome.tabs.sendMessage(tab.id, { type: 'RELOAD_SEQUENCES' }).catch(() => {});
+    }
+
+    showSavedFeedback();
+  }
+}
+
+// Show saved feedback
+function showSavedFeedback() {
+  const originalText = saveBtn.textContent;
+  saveBtn.textContent = 'Saved!';
+  saveBtn.style.background = '#4CAF50';
+  setTimeout(() => {
+    saveBtn.textContent = originalText;
+    saveBtn.style.background = '';
+  }, 1000);
+}
+
+// Create new sequence
+async function createNewSequence() {
+  const name = prompt('Enter sequence name:');
+  if (name && name.trim()) {
+    const newId = generateId();
+    sequences[newId] = {
+      id: newId,
+      name: name.trim(),
+      blocks: ['']
+    };
+
+    activeSequenceId = newId;
+    currentTextBlocks = [''];
+
+    await saveSequencesToStorage();
+    await saveActiveSequence();
+    updateUI();
+  }
+}
+
+// Delete current sequence
+async function deleteCurrentSequence() {
+  if (Object.keys(sequences).length <= 1) {
+    alert('Cannot delete the last sequence!');
+    return;
+  }
+
+  const confirmed = confirm(`Delete sequence "${sequences[activeSequenceId].name}"?`);
+  if (confirmed) {
+    delete sequences[activeSequenceId];
+
+    // Switch to first available sequence
+    activeSequenceId = Object.keys(sequences)[0];
+    currentTextBlocks = [...sequences[activeSequenceId].blocks];
+
+    await saveSequencesToStorage();
+    await saveActiveSequence();
+    updateUI();
+  }
+}
+
+// Switch sequence
+async function switchSequence(sequenceId) {
+  if (sequenceId && sequences[sequenceId]) {
+    activeSequenceId = sequenceId;
+    currentTextBlocks = [...sequences[activeSequenceId].blocks];
+    await saveActiveSequence();
+    renderTextBlocks();
+  }
+}
+
+// Generate unique ID
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+// Drag and Drop functionality
+let draggedIndex = null;
+
+function handleDragStart(e) {
+  draggedIndex = parseInt(e.currentTarget.dataset.index);
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/html', e.currentTarget.innerHTML);
+}
+
+function handleDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  // Remove all drag-over classes
+  document.querySelectorAll('.text-block').forEach(block => {
+    block.classList.remove('drag-over');
+  });
+}
+
+function handleDragOver(e) {
+  if (e.preventDefault) {
+    e.preventDefault();
+  }
+  e.dataTransfer.dropEffect = 'move';
+
+  const targetIndex = parseInt(e.currentTarget.dataset.index);
+  if (draggedIndex !== targetIndex) {
+    e.currentTarget.classList.add('drag-over');
+  }
+
+  return false;
+}
+
+function handleDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+function handleDrop(e) {
+  if (e.stopPropagation) {
+    e.stopPropagation();
+  }
+  e.preventDefault();
+
+  const targetIndex = parseInt(e.currentTarget.dataset.index);
+
+  if (draggedIndex !== targetIndex && draggedIndex !== null) {
+    // Reorder the array
+    const draggedItem = currentTextBlocks[draggedIndex];
+    currentTextBlocks.splice(draggedIndex, 1);
+    currentTextBlocks.splice(targetIndex, 0, draggedItem);
+
+    // Re-render
+    renderTextBlocks();
+  }
+
+  return false;
+}
+
+// Reset sequence to start from first block
+async function resetSequence() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab) {
+    chrome.tabs.sendMessage(tab.id, { type: 'RESET_SEQUENCE' }).catch(() => {});
+  }
+
+  // Show feedback
+  const originalText = resetBtn.textContent;
+  resetBtn.textContent = 'Reset!';
+  resetBtn.style.background = '#4CAF50';
+  setTimeout(() => {
+    resetBtn.textContent = originalText;
+    resetBtn.style.background = '';
+  }, 1000);
+}
+
+// Attach event listeners
+function attachEventListeners() {
+  addBlockBtn.addEventListener('click', addBlock);
+  resetBtn.addEventListener('click', resetSequence);
+  saveBtn.addEventListener('click', saveCurrentSequence);
+  newSequenceBtn.addEventListener('click', createNewSequence);
+  deleteSequenceBtn.addEventListener('click', deleteCurrentSequence);
+  sequenceSelect.addEventListener('change', (e) => switchSequence(e.target.value));
+}
+
+// Initialize on load
+init();

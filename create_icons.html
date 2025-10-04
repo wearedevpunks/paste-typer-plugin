@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<body>
+<canvas id="c16" width="16" height="16"></canvas>
+<canvas id="c48" width="48" height="48"></canvas>
+<canvas id="c128" width="128" height="128"></canvas>
+<script>
+function createIcon(canvas, size) {
+  const ctx = canvas.getContext('2d');
+  
+  // Background
+  ctx.fillStyle = '#4CAF50';
+  ctx.fillRect(0, 0, size, size);
+  
+  // Text
+  ctx.fillStyle = 'white';
+  ctx.font = `bold ${size * 0.5}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('PT', size / 2, size / 2);
+}
+
+createIcon(document.getElementById('c16'), 16);
+createIcon(document.getElementById('c48'), 48);
+createIcon(document.getElementById('c128'), 128);
+
+// Download function
+function downloadCanvas(canvas, filename) {
+  const link = document.createElement('a');
+  link.download = filename;
+  link.href = canvas.toDataURL();
+  link.click();
+}
+
+setTimeout(() => {
+  downloadCanvas(document.getElementById('c16'), 'icon16.png');
+  setTimeout(() => {
+    downloadCanvas(document.getElementById('c48'), 'icon48.png');
+    setTimeout(() => {
+      downloadCanvas(document.getElementById('c128'), 'icon128.png');
+    }, 100);
+  }, 100);
+}, 100);
+</script>
+</body>
+</html>
