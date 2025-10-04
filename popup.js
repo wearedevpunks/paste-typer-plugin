@@ -26,6 +26,14 @@ async function init() {
   await loadSequences();
   await loadActiveSequence();
   await loadLogs();
+
+  // Now we can log (after loadLogs)
+  addLog('info', 'Popup opened and initialized', {
+    activeSequenceId,
+    numSequences: Object.keys(sequences).length,
+    numBlocks: sequences[activeSequenceId]?.blocks?.length || 0
+  });
+
   updateUI();
   attachEventListeners();
   setupLogListener();
