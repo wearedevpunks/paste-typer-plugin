@@ -3,6 +3,7 @@ const STORAGE_KEY = 'pasteTyperSequences';
 const ACTIVE_SEQUENCE_KEY = 'pasteTyperActiveSequence';
 const LOG_KEY = 'pasteTyperLogs';
 const HUMANIZE_KEY = 'pasteTyperHumanize';
+const SPEED_KEY = 'pasteTyperSpeed';
 
 // State
 let sequences = {};
@@ -10,6 +11,7 @@ let activeSequenceId = null;
 let currentTextBlocks = [];
 let logs = [];
 let humanizeTyping = true; // Default to humanized
+let typingSpeed = 1.0; // Default speed multiplier
 
 // DOM Elements
 const sequenceSelect = document.getElementById('sequenceSelect');
@@ -23,6 +25,8 @@ const logContainer = document.getElementById('logContainer');
 const clearLogBtn = document.getElementById('clearLogBtn');
 const testConnectionBtn = document.getElementById('testConnectionBtn');
 const humanizeToggle = document.getElementById('humanizeToggle');
+const speedSlider = document.getElementById('speedSlider');
+const speedValue = document.getElementById('speedValue');
 
 // Initialize
 async function init() {
@@ -30,13 +34,15 @@ async function init() {
   await loadActiveSequence();
   await loadLogs();
   await loadHumanizeSetting();
+  await loadSpeedSetting();
 
   // Now we can log (after loadLogs)
   addLog('info', 'Popup opened and initialized', {
     activeSequenceId,
     numSequences: Object.keys(sequences).length,
     numBlocks: sequences[activeSequenceId]?.blocks?.length || 0,
-    humanizeTyping
+    humanizeTyping,
+    typingSpeed
   });
 
   updateUI();
@@ -106,6 +112,30 @@ async function saveHumanizeSetting() {
   }
 
   addLog('info', 'Humanize typing setting updated', { humanizeTyping });
+}
+
+// Load speed setting
+async function loadSpeedSetting() {
+  const result = await chrome.storage.local.get(SPEED_KEY);
+  typingSpeed = result[SPEED_KEY] !== undefined ? result[SPEED_KEY] : 1.0;
+  speedSlider.value = typingSpeed;
+  speedValue.textContent = typingSpeed.toFixed(1) + 'x';
+}
+
+// Save speed setting
+async function saveSpeedSetting() {
+  await chrome.storage.local.set({ [SPEED_KEY]: typingSpeed });
+
+  // Notify content script
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab) {
+    chrome.tabs.sendMessage(tab.id, {
+      type: 'UPDATE_SPEED',
+      speed: typingSpeed
+    }).catch(() => {});
+  }
+
+  addLog('info', 'Typing speed updated', { typingSpeed });
 }
 
 // Update UI
@@ -506,6 +536,11 @@ function attachEventListeners() {
   humanizeToggle.addEventListener('change', (e) => {
     humanizeTyping = e.target.checked;
     saveHumanizeSetting();
+  });
+  speedSlider.addEventListener('input', (e) => {
+    typingSpeed = parseFloat(e.target.value);
+    speedValue.textContent = typingSpeed.toFixed(1) + 'x';
+    saveSpeedSetting();
   });
 }
 

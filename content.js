@@ -2,6 +2,7 @@
 const STORAGE_KEY = 'pasteTyperSequences';
 const ACTIVE_SEQUENCE_KEY = 'pasteTyperActiveSequence';
 const HUMANIZE_KEY = 'pasteTyperHumanize';
+const SPEED_KEY = 'pasteTyperSpeed';
 
 // State
 let sequences = {};
@@ -9,6 +10,7 @@ let activeSequenceId = null;
 let currentBlockIndex = 0;
 let isTyping = false;
 let humanizeTyping = true;
+let typingSpeed = 1.0;
 
 // Configuration
 const TYPING_SPEED_MIN = 40; // milliseconds
@@ -46,15 +48,17 @@ async function init() {
 
 // Load sequences and active sequence
 async function loadData() {
-  const result = await chrome.storage.local.get([STORAGE_KEY, ACTIVE_SEQUENCE_KEY, HUMANIZE_KEY]);
+  const result = await chrome.storage.local.get([STORAGE_KEY, ACTIVE_SEQUENCE_KEY, HUMANIZE_KEY, SPEED_KEY]);
   sequences = result[STORAGE_KEY] || {};
   activeSequenceId = result[ACTIVE_SEQUENCE_KEY];
   humanizeTyping = result[HUMANIZE_KEY] !== undefined ? result[HUMANIZE_KEY] : true;
+  typingSpeed = result[SPEED_KEY] !== undefined ? result[SPEED_KEY] : 1.0;
   log('info', 'Data loaded from storage', {
     activeSequenceId,
     numSequences: Object.keys(sequences).length,
     currentBlockIndex,
-    humanizeTyping
+    humanizeTyping,
+    typingSpeed
   });
 }
 
@@ -97,7 +101,8 @@ function setupMessageListener() {
         currentBlockIndex,
         activeSequenceId,
         numSequences: Object.keys(sequences).length,
-        humanizeTyping
+        humanizeTyping,
+        typingSpeed
       });
       return true;
     } else if (message.type === 'RELOAD_SEQUENCES') {
@@ -118,6 +123,11 @@ function setupMessageListener() {
       humanizeTyping = message.humanize;
       log('success', 'Humanize typing setting updated', { humanizeTyping });
       sendResponse({ success: true, humanizeTyping });
+      return true;
+    } else if (message.type === 'UPDATE_SPEED') {
+      typingSpeed = message.speed;
+      log('success', 'Typing speed updated', { typingSpeed });
+      sendResponse({ success: true, typingSpeed });
       return true;
     }
   });
@@ -273,6 +283,9 @@ async function typeText(element, text) {
       // Simple consistent typing speed (original behavior)
       delay = Math.random() * (TYPING_SPEED_MAX - TYPING_SPEED_MIN) + TYPING_SPEED_MIN;
     }
+
+    // Apply speed multiplier (inverse: higher speed = lower delay)
+    delay = delay / typingSpeed;
 
     await sleep(delay);
   }
