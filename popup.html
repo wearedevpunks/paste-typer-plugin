@@ -175,6 +175,99 @@
       font-size: 11px;
       font-weight: 600;
     }
+
+    .debug-section {
+      margin-top: 24px;
+      border-top: 2px solid #ddd;
+      padding-top: 16px;
+    }
+
+    .debug-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .debug-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin: 0;
+    }
+
+    .btn-clear {
+      background: #666;
+      color: white;
+      padding: 4px 12px;
+      font-size: 11px;
+    }
+
+    .btn-clear:hover {
+      background: #555;
+    }
+
+    .log-container {
+      background: #1e1e1e;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: #d4d4d4;
+      line-height: 1.4;
+    }
+
+    .log-container:empty::before {
+      content: 'No activity yet...';
+      color: #666;
+      font-style: italic;
+    }
+
+    .log-entry {
+      margin-bottom: 4px;
+      padding: 4px;
+      border-left: 3px solid transparent;
+    }
+
+    .log-entry.info {
+      border-left-color: #2196F3;
+    }
+
+    .log-entry.success {
+      border-left-color: #4CAF50;
+    }
+
+    .log-entry.error {
+      border-left-color: #f44336;
+    }
+
+    .log-entry.warning {
+      border-left-color: #ff9800;
+    }
+
+    .log-time {
+      color: #858585;
+      margin-right: 8px;
+    }
+
+    .log-type {
+      color: #4ec9b0;
+      margin-right: 8px;
+      font-weight: bold;
+    }
+
+    .log-message {
+      color: #d4d4d4;
+    }
+
+    .log-meta {
+      color: #9cdcfe;
+      margin-left: 8px;
+      font-size: 10px;
+    }
   </style>
 </head>
 <body>
@@ -200,6 +293,14 @@
     <button id="addBlockBtn" class="btn-secondary">+ Add Text Block</button>
     <button id="resetBtn" class="btn-secondary">Reset Sequence</button>
     <button id="saveBtn" class="btn-primary">Save</button>
+  </div>
+
+  <div class="debug-section">
+    <div class="debug-header">
+      <h2>Activity Log</h2>
+      <button id="clearLogBtn" class="btn-clear">Clear</button>
+    </div>
+    <div id="logContainer" class="log-container"></div>
   </div>
 
   <script src="popup.js"></script>

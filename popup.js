@@ -1,11 +1,13 @@
 // Storage keys
 const STORAGE_KEY = 'pasteTyperSequences';
 const ACTIVE_SEQUENCE_KEY = 'pasteTyperActiveSequence';
+const LOG_KEY = 'pasteTyperLogs';
 
 // State
 let sequences = {};
 let activeSequenceId = null;
 let currentTextBlocks = [];
+let logs = [];
 
 // DOM Elements
 const sequenceSelect = document.getElementById('sequenceSelect');
@@ -15,13 +17,17 @@ const textBlocksContainer = document.getElementById('textBlocksContainer');
 const addBlockBtn = document.getElementById('addBlockBtn');
 const resetBtn = document.getElementById('resetBtn');
 const saveBtn = document.getElementById('saveBtn');
+const logContainer = document.getElementById('logContainer');
+const clearLogBtn = document.getElementById('clearLogBtn');
 
 // Initialize
 async function init() {
   await loadSequences();
   await loadActiveSequence();
+  await loadLogs();
   updateUI();
   attachEventListeners();
+  setupLogListener();
 }
 
 // Load sequences from storage
@@ -301,11 +307,87 @@ function handleDrop(e) {
   return false;
 }
 
+// Logging functionality
+async function loadLogs() {
+  const result = await chrome.storage.local.get(LOG_KEY);
+  logs = result[LOG_KEY] || [];
+  renderLogs();
+}
+
+async function addLog(type, message, meta = {}) {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    type,
+    message,
+    meta
+  };
+
+  logs.unshift(logEntry); // Add to beginning
+
+  // Keep only last 100 logs
+  if (logs.length > 100) {
+    logs = logs.slice(0, 100);
+  }
+
+  await chrome.storage.local.set({ [LOG_KEY]: logs });
+  renderLogs();
+}
+
+function renderLogs() {
+  logContainer.innerHTML = '';
+
+  logs.forEach(log => {
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${log.type}`;
+
+    const time = new Date(log.timestamp).toLocaleTimeString();
+    const metaStr = Object.keys(log.meta).length > 0 ? JSON.stringify(log.meta) : '';
+
+    entry.innerHTML = `
+      <span class="log-time">[${time}]</span>
+      <span class="log-type">${log.type.toUpperCase()}</span>
+      <span class="log-message">${log.message}</span>
+      ${metaStr ? `<span class="log-meta">${metaStr}</span>` : ''}
+    `;
+
+    logContainer.appendChild(entry);
+  });
+
+  // Auto-scroll to top (newest)
+  logContainer.scrollTop = 0;
+}
+
+async function clearLogs() {
+  logs = [];
+  await chrome.storage.local.set({ [LOG_KEY]: logs });
+  renderLogs();
+}
+
+// Setup listener for logs from content script
+function setupLogListener() {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'LOG') {
+      addLog(message.logType, message.message, message.meta || {});
+    }
+  });
+}
+
 // Reset sequence to start from first block
 async function resetSequence() {
+  addLog('info', 'Reset button clicked', { activeSequenceId });
+
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) {
-    chrome.tabs.sendMessage(tab.id, { type: 'RESET_SEQUENCE' }).catch(() => {});
+    addLog('info', 'Sending RESET_SEQUENCE message to tab', { tabId: tab.id });
+    chrome.tabs.sendMessage(tab.id, { type: 'RESET_SEQUENCE' })
+      .then(() => {
+        addLog('success', 'RESET_SEQUENCE message sent successfully');
+      })
+      .catch((error) => {
+        addLog('error', 'Failed to send RESET_SEQUENCE message', { error: error.message });
+      });
+  } else {
+    addLog('error', 'No active tab found');
   }
 
   // Show feedback
@@ -326,6 +408,7 @@ function attachEventListeners() {
   newSequenceBtn.addEventListener('click', createNewSequence);
   deleteSequenceBtn.addEventListener('click', deleteCurrentSequence);
   sequenceSelect.addEventListener('change', (e) => switchSequence(e.target.value));
+  clearLogBtn.addEventListener('click', clearLogs);
 }
 
 // Initialize on load
